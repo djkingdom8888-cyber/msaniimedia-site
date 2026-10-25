@@ -150,10 +150,18 @@
   // window/screen -- both paths below call this after they have SOME
   // hostStream, so neither depends on the other having run first.
   function setupAudioAndCanvas() {
-    if (audioCtx) return; // already set up
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    mixDestination = audioCtx.createMediaStreamDestination();
-    audioCtx.createMediaStreamSource(hostStream).connect(mixDestination);
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      mixDestination = audioCtx.createMediaStreamDestination();
+    }
+    // hostStream may be video-only (e.g. a window share where the mic
+    // couldn't be grabbed) -- createMediaStreamSource() throws hard on a
+    // stream with no audio track, so only wire it up if one actually
+    // exists. The broadcast still works fine with no audio in that case.
+    if (hostStream.getAudioTracks().length > 0) {
+      audioCtx.createMediaStreamSource(hostStream).connect(mixDestination);
+    }
+    if (finalStream) return; // canvas/finalStream/drawLoop already running
 
     const canvasStream = canvas.captureStream(30);
     finalStream = new MediaStream([
