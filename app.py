@@ -27,6 +27,7 @@ def _get_or_create_secret_key():
 app.secret_key = _get_or_create_secret_key()
 db.init_db()
 auth.bootstrap_admin()
+auth.reset_password_if_requested()
 socketio = SocketIO(app, async_mode="gevent", max_http_buffer_size=300 * 1024 * 1024)
 
 

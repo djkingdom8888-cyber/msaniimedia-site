@@ -20,6 +20,28 @@ def bootstrap_admin():
             "INSERT INTO admin_users (username, password_hash) VALUES (?,?)",
             ("admin", generate_password_hash(password, method="pbkdf2:sha256")),
         )
+    _write_credentials_file(password)
+
+
+def reset_password_if_requested():
+    """If ADMIN_RESET_PASSWORD is set in the environment, force the admin
+    account's password to that value on boot. Lets the operator recover
+    access without needing shell/disk access to the running instance."""
+    new_password = os.environ.get("ADMIN_RESET_PASSWORD")
+    if not new_password:
+        return
+    with db.session() as conn:
+        row = conn.execute("SELECT id FROM admin_users WHERE username = 'admin'").fetchone()
+        if not row:
+            return
+        conn.execute(
+            "UPDATE admin_users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(new_password, method="pbkdf2:sha256"), row["id"]),
+        )
+    _write_credentials_file(new_password)
+
+
+def _write_credentials_file(password):
     with open(CREDENTIALS_NOTICE_PATH, "w") as f:
         f.write(
             "Msanii Media admin — first-run credentials\n"
