@@ -173,6 +173,7 @@
       audio: true,
     });
     selfPreview.srcObject = hostStream;
+      selfPreview.play().catch(() => {});
     await populateCameraSources();
     setupAudioAndCanvas();
   }
@@ -197,6 +198,7 @@
       oldTrack.stop();
       hostStream.addTrack(newTrack);
       selfPreview.srcObject = hostStream; // re-assign so the element notices the swap
+      selfPreview.play().catch(() => {});
       currentFacingMode = nextFacing;
     } catch (err) {
       alert("Couldn't switch camera: " + err.message);
@@ -248,6 +250,7 @@
       oldTrack.stop();
       hostStream.addTrack(newTrack);
       selfPreview.srcObject = hostStream;
+      selfPreview.play().catch(() => {});
     } catch (err) {
       alert("Couldn't switch to that source: " + err.message);
     } finally {
@@ -289,6 +292,7 @@
         hostStream.addTrack(newTrack);
       }
       selfPreview.srcObject = hostStream;
+      selfPreview.play().catch(() => {});
       setupAudioAndCanvas();
       // The browser's own "Stop sharing" control (or closing the shared
       // window) ends the track -- fall back to the camera rather than
@@ -309,6 +313,7 @@
           deadTrack.stop();
           hostStream.addTrack(fallbackTrack);
           selfPreview.srcObject = hostStream;
+      selfPreview.play().catch(() => {});
         } catch (err) {
           console.error("Couldn't fall back to camera after window share ended:", err);
         }
