@@ -145,17 +145,12 @@
   }
 
   // ---------------- Camera + canvas compositing loop ----------------
-  async function initCamera() {
-    const videoConstraint = selectedDeviceId
-      ? { deviceId: { exact: selectedDeviceId } }
-      : { facingMode: { ideal: currentFacingMode } };
-    hostStream = await navigator.mediaDevices.getUserMedia({
-      video: videoConstraint,
-      audio: true,
-    });
-    selfPreview.srcObject = hostStream;
-    await populateCameraSources();
-
+  // Builds the audio-mix graph and canvas capture exactly once, regardless
+  // of whether hostStream ended up holding a real camera or a shared
+  // window/screen -- both paths below call this after they have SOME
+  // hostStream, so neither depends on the other having run first.
+  function setupAudioAndCanvas() {
+    if (audioCtx) return; // already set up
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     mixDestination = audioCtx.createMediaStreamDestination();
     audioCtx.createMediaStreamSource(hostStream).connect(mixDestination);
@@ -167,6 +162,19 @@
     ]);
 
     drawLoop();
+  }
+
+  async function initCamera() {
+    const videoConstraint = selectedDeviceId
+      ? { deviceId: { exact: selectedDeviceId } }
+      : { facingMode: { ideal: currentFacingMode } };
+    hostStream = await navigator.mediaDevices.getUserMedia({
+      video: videoConstraint,
+      audio: true,
+    });
+    selfPreview.srcObject = hostStream;
+    await populateCameraSources();
+    setupAudioAndCanvas();
   }
 
   // Swaps the host's own camera between front/back. This never needs to touch
@@ -254,16 +262,34 @@
   // "Output" window) on the broadcast when a virtual-camera bridge isn't
   // available or isn't working on this machine.
   async function shareWindow() {
-    if (!hostStream) return;
     shareWindowBtn.disabled = true;
     try {
       const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const newTrack = displayStream.getVideoTracks()[0];
-      const oldTrack = hostStream.getVideoTracks()[0];
-      hostStream.removeTrack(oldTrack);
-      oldTrack.stop();
-      hostStream.addTrack(newTrack);
+
+      // This is deliberately NOT gated on hostStream already existing --
+      // sharing a window is a full alternative to the camera, not something
+      // that requires the camera to have worked first. If initCamera()
+      // hasn't produced a stream yet (still waiting on a permission prompt,
+      // denied, no camera present, whatever), build hostStream fresh here
+      // instead of silently doing nothing.
+      if (!hostStream) {
+        let micTrack = null;
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          micTrack = micStream.getAudioTracks()[0];
+        } catch (err) {
+          console.warn("No mic available for window share, continuing video-only:", err);
+        }
+        hostStream = new MediaStream(micTrack ? [newTrack, micTrack] : [newTrack]);
+      } else {
+        const oldTrack = hostStream.getVideoTracks()[0];
+        hostStream.removeTrack(oldTrack);
+        oldTrack.stop();
+        hostStream.addTrack(newTrack);
+      }
       selfPreview.srcObject = hostStream;
+      setupAudioAndCanvas();
       // The browser's own "Stop sharing" control (or closing the shared
       // window) ends the track -- fall back to the camera rather than
       // leaving the broadcast on a dead track.
