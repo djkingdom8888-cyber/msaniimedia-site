@@ -22,6 +22,8 @@
   const statusBadge = document.getElementById("status-badge");
   const switchCameraBtn = document.getElementById("switch-camera-btn");
   const filterSelect = document.getElementById("filter-select");
+  const cameraSourceSelect = document.getElementById("camera-source-select");
+  let selectedDeviceId = null; // explicit device pick (e.g. "OBS Virtual Camera"); null = browser default
 
   // Filters used to be applied via ctx.filter = "<css filter string>" at
   // draw time. That property is unreliable on WebKit/iOS Safari -- multi-
@@ -143,11 +145,15 @@
 
   // ---------------- Camera + canvas compositing loop ----------------
   async function initCamera() {
+    const videoConstraint = selectedDeviceId
+      ? { deviceId: { exact: selectedDeviceId } }
+      : { facingMode: { ideal: currentFacingMode } };
     hostStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: currentFacingMode } },
+      video: videoConstraint,
       audio: true,
     });
     selfPreview.srcObject = hostStream;
+    await populateCameraSources();
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     mixDestination = audioCtx.createMediaStreamDestination();
@@ -190,6 +196,58 @@
     }
   }
   if (switchCameraBtn) switchCameraBtn.onclick = switchCamera;
+
+  // Lists every video input the browser can see (webcams, phone-continuity
+  // cameras, and virtual cameras like "OBS Virtual Camera") so the host can
+  // explicitly pick one instead of relying on facingMode guessing -- that's
+  // the only way to route a desktop switcher's program output (via OBS's
+  // virtual camera) into this broadcast instead of a real webcam.
+  async function populateCameraSources() {
+    if (!cameraSourceSelect || !navigator.mediaDevices.enumerateDevices) return;
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter((d) => d.kind === "videoinput");
+    const previousValue = cameraSourceSelect.value;
+    cameraSourceSelect.innerHTML = "";
+    cams.forEach((d, i) => {
+      const opt = document.createElement("option");
+      opt.value = d.deviceId;
+      opt.textContent = d.label || `Camera ${i + 1}`;
+      cameraSourceSelect.appendChild(opt);
+    });
+    const stillPresent = cams.some((d) => d.deviceId === previousValue);
+    if (stillPresent) {
+      cameraSourceSelect.value = previousValue;
+    } else {
+      const obsCam = cams.find((d) => /obs virtual camera/i.test(d.label));
+      if (obsCam) cameraSourceSelect.value = obsCam.deviceId;
+    }
+    selectedDeviceId = cameraSourceSelect.value || null;
+  }
+  if (navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener("devicechange", populateCameraSources);
+  }
+
+  async function switchToSelectedSource() {
+    if (!hostStream || !cameraSourceSelect.value) return;
+    selectedDeviceId = cameraSourceSelect.value;
+    cameraSourceSelect.disabled = true;
+    try {
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: selectedDeviceId } },
+      });
+      const newTrack = newVideoStream.getVideoTracks()[0];
+      const oldTrack = hostStream.getVideoTracks()[0];
+      hostStream.removeTrack(oldTrack);
+      oldTrack.stop();
+      hostStream.addTrack(newTrack);
+      selfPreview.srcObject = hostStream;
+    } catch (err) {
+      alert("Couldn't switch to that source: " + err.message);
+    } finally {
+      cameraSourceSelect.disabled = false;
+    }
+  }
+  if (cameraSourceSelect) cameraSourceSelect.onchange = switchToSelectedSource;
 
   if (filterSelect) {
     filterSelect.onchange = () => { currentFilter = filterSelect.value; };
