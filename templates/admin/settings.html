@@ -1,0 +1,20 @@
+{% extends "admin/layout.html" %}
+{% block title %}Settings{% endblock %}
+{% block heading %}Settings{% endblock %}
+{% block content %}
+
+<div class="a-card">
+  <h3>Change password</h3>
+  <p class="a-card-sub">Use at least 8 characters.</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="a-field"><label>Current password</label><input type="password" name="current_password" autocomplete="current-password" required></div>
+    <div class="a-row">
+      <div class="a-field"><label>New password</label><input type="password" name="new_password" autocomplete="new-password" required minlength="8"></div>
+      <div class="a-field"><label>Confirm new password</label><input type="password" name="confirm_password" autocomplete="new-password" required minlength="8"></div>
+    </div>
+    <button type="submit" class="a-btn a-btn-primary">Update password</button>
+  </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "admin/layout.html" %}
+{% block title %}Ads{% endblock %}
+{% block heading %}Ads{% endblock %}
+{% block content %}
+
+<div class="a-card">
+  <h3>Create an ad</h3>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="a-row">
+      <div class="a-field"><label>Title</label><input type="text" name="title" required></div>
+      <div class="a-field"><label>Sponsor</label><input type="text" name="sponsor"></div>
+    </div>
+    <div class="a-row">
+      <div class="a-field"><label>Link URL</label><input type="url" name="link_url" placeholder="https://…"></div>
+      <div class="a-field">
+        <label>Placement</label>
+        <select name="placement">
+          <option value="homepage">Homepage</option>
+          <option value="episode">Episode pages</option>
+          <option value="news">News pages</option>
+        </select>
+      </div>
+    </div>
+    <div class="a-field"><label>Creative image</label><input type="file" name="creative_image" accept="image/*"></div>
+    <button type="submit" class="a-btn a-btn-primary">Create ad</button>
+  </form>
+</div>
+
+<div class="a-card">
+  <h3>All ads</h3>
+  {% if ads %}
+    {% for ad in ads %}
+    <div class="a-list-item">
+      <div><strong>{{ ad['title'] }}</strong><span class="sub">{{ ad['sponsor'] }} · {{ ad['placement']|capitalize }}</span></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="badge-pill {{ 'on' if ad['active'] else 'off' }}">{{ 'Active' if ad['active'] else 'Hidden' }}</span>
+        <form method="post" action="{{ url_for('admin_ad_toggle', ad_id=ad['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="a-btn {{ 'a-btn-danger' if ad['active'] else 'a-btn-outline' }} a-btn-sm">{{ 'Hide' if ad['active'] else 'Unhide' }}</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="a-empty">No ads yet.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "public/base.html" %}
+{% block title %}Host: {{ live_session['title'] }} · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:32px;">
+  <div class="wrap">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="status-badge {{ live_session['status'] }}" id="status-badge">{{ live_session['status']|upper }}</span>
+        <h1 style="font-size:22px;">{{ live_session['title'] }} <span style="color:var(--muted); font-weight:400; font-size:15px;">(host console)</span></h1>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button id="go-live-btn" class="btn btn-primary">▶ Go Live</button>
+        <button id="end-live-btn" class="btn btn-outline" disabled>■ End &amp; Save</button>
+      </div>
+    </div>
+    <p style="color:var(--muted); font-size:13.5px; margin-bottom:20px;">
+      Share this with viewers: <code style="background:var(--panel-2); padding:3px 8px; border-radius:6px;">{{ request.host_url }}live/{{ live_session['room_code'] }}</code>
+    </p>
+
+    <div class="live-grid">
+      <div>
+        <div class="live-stage">
+          <canvas id="compose-canvas" width="1280" height="720" style="width:100%; aspect-ratio:16/9; display:block; background:#000;"></canvas>
+          <video id="self-preview" autoplay playsinline muted style="display:none;"></video>
+        </div>
+        <div class="stage-controls">
+          <button id="switch-camera-btn" class="btn btn-outline btn-sm" type="button">↺ Switch Camera</button>
+          <select id="filter-select">
+            <option value="none">No Filter</option>
+            <option value="vivid" selected>Vivid</option>
+            <option value="mono">Mono</option>
+            <option value="noir">Noir</option>
+            <option value="warm">Warm</option>
+            <option value="cool">Cool</option>
+            <option value="dreamy">Dreamy</option>
+          </select>
+        </div>
+        <div id="camera-requests" style="margin-top:16px;"></div>
+      </div>
+
+      <div class="chat-panel">
+        <div class="chat-head">Live Chat</div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input id="chat-input" type="text" placeholder="Say something…" maxlength="300">
+          <button id="chat-send" class="btn btn-primary btn-sm">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  window.LIVE_ROOM = {{ live_session['room_code']|tojson }};
+  window.HOST_NAME = {{ (live_session['host_name'] or 'Host')|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/live-host.js') }}"></script>
+
+{% endblock %}

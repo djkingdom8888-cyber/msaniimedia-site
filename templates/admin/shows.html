@@ -1,0 +1,51 @@
+{% extends "admin/layout.html" %}
+{% block title %}Shows{% endblock %}
+{% block heading %}Shows &amp; Episodes{% endblock %}
+{% block content %}
+
+<div class="a-card">
+  <h3>Create a show</h3>
+  <p class="a-card-sub">A show can be a series or a talk show — episodes are added inside each show.</p>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="a-row">
+      <div class="a-field"><label>Title</label><input type="text" name="title" required></div>
+      <div class="a-field">
+        <label>Type</label>
+        <select name="kind">
+          <option value="series">Series</option>
+          <option value="talk_show">Talk Show</option>
+        </select>
+      </div>
+    </div>
+    <div class="a-field"><label>Description</label><textarea name="description"></textarea></div>
+    <div class="a-field"><label>Cover image</label><input type="file" name="cover_image" accept="image/*"></div>
+    <button type="submit" class="a-btn a-btn-primary">Create show</button>
+  </form>
+</div>
+
+<div class="a-card">
+  <h3>All shows</h3>
+  {% if shows %}
+    {% for s in shows %}
+    <div class="a-list-item">
+      <div>
+        <strong>{{ s['title'] }}</strong>
+        <span class="sub">{{ 'Talk Show' if s['kind'] == 'talk_show' else 'Series' }} · {{ s['description'][:80] }}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="badge-pill {{ 'on' if s['active'] else 'off' }}">{{ 'Active' if s['active'] else 'Hidden' }}</span>
+        <a href="{{ url_for('admin_episodes', show_id=s['id']) }}" class="a-btn a-btn-outline a-btn-sm">Manage episodes</a>
+        <form method="post" action="{{ url_for('admin_show_toggle', show_id=s['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="a-btn {{ 'a-btn-danger' if s['active'] else 'a-btn-outline' }} a-btn-sm">{{ 'Hide' if s['active'] else 'Unhide' }}</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="a-empty">No shows yet.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "public/base.html" %}
+{% block title %}{{ post['title'] }} · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:40px;">
+  <div class="wrap" style="max-width:760px;">
+    <span class="eyebrow">News</span>
+    <h1 style="margin-top:14px; font-size:clamp(26px,3.6vw,38px);">{{ post['title'] }}</h1>
+    <p style="margin-top:10px; color:var(--muted); font-size:13px;">{{ post['author'] }} · {{ post['published_at'] }}</p>
+    {% if post['image'] %}
+    <img src="{{ post['image'] }}" alt="" style="border-radius:14px; margin-top:24px;">
+    {% endif %}
+    <div style="margin-top:24px; font-size:16px; line-height:1.8; white-space:pre-wrap; color:#dcdce2;">{{ post['body'] }}</div>
+  </div>
+</section>
+
+{% endblock %}

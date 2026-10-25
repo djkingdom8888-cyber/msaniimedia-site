@@ -1,0 +1,27 @@
+{% extends "public/base.html" %}
+{% block title %}Sponsors · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:48px;">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Sponsors &amp; Advertising</span>
+      <h2 style="margin-top:14px;">Our Partners</h2>
+      <p>Interested in advertising with {{ site_name }}? Reach an engaged audience across our shows and live broadcasts.</p>
+    </div>
+    {% if ads %}
+    <div style="display:grid; gap:14px; max-width:720px; margin:0 auto;">
+      {% for ad in ads %}
+      <a class="ad-unit" href="{{ ad['link_url'] or '#' }}">
+        <div class="thumb">{% if ad['creative_image'] %}<img src="{{ ad['creative_image'] }}" alt="">{% endif %}</div>
+        <div><span class="tag">Sponsored</span><h4>{{ ad['title'] }}</h4><span class="sponsor">{{ ad['sponsor'] }}</span></div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-note">No sponsor placements yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "public/base.html" %}
+{% block title %}Shows · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:48px;">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Shows</span>
+      <h2 style="margin-top:14px;">Series &amp; Talk Shows</h2>
+    </div>
+
+    <h3 style="margin-bottom:20px;">Series</h3>
+    {% if series %}
+    <div class="card-grid" style="margin-bottom:56px;">
+      {% for s in series %}
+      <a class="media-card" href="{{ url_for('show_detail', show_id=s['id']) }}">
+        <div class="thumb">{% if s['cover_image'] %}<img src="{{ s['cover_image'] }}" alt="">{% else %}🎬{% endif %}</div>
+        <div class="body"><h3>{{ s['title'] }}</h3><p>{{ s['description'] }}</p></div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-note" style="margin-bottom:56px;">No series published yet.</p>
+    {% endif %}
+
+    <h3 style="margin-bottom:20px;">Talk Shows</h3>
+    {% if talk_shows %}
+    <div class="card-grid">
+      {% for s in talk_shows %}
+      <a class="media-card" href="{{ url_for('show_detail', show_id=s['id']) }}">
+        <div class="thumb">{% if s['cover_image'] %}<img src="{{ s['cover_image'] }}" alt="">{% else %}🎙️{% endif %}</div>
+        <div class="body"><h3>{{ s['title'] }}</h3><p>{{ s['description'] }}</p></div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-note">No talk shows published yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

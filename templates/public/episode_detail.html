@@ -1,0 +1,36 @@
+{% extends "public/base.html" %}
+{% block title %}{{ episode['title'] }} · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:40px;">
+  <div class="wrap">
+    <div class="player-shell" style="margin-bottom:28px;">
+      {% if 'youtube.com' in episode['video_url'] or 'youtu.be' in episode['video_url'] %}
+        {% set vid = episode['video_url'].split('v=')[-1].split('/')[-1].split('&')[0] %}
+        <iframe src="https://www.youtube.com/embed/{{ vid }}" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+      {% elif episode['video_url'] %}
+        <video src="{{ episode['video_url'] }}" controls></video>
+      {% else %}
+        <div style="width:100%; aspect-ratio:16/9; display:flex; align-items:center; justify-content:center; color:var(--muted);">No video attached to this episode yet.</div>
+      {% endif %}
+    </div>
+
+    <span class="eyebrow">{{ episode['show_title'] }} · Ep. {{ episode['episode_number'] }}</span>
+    <h1 style="margin-top:14px; font-size:clamp(24px,3.4vw,34px);">{{ episode['title'] }}</h1>
+    <p style="margin-top:14px; color:var(--muted); font-size:15.5px; max-width:720px;">{{ episode['description'] }}</p>
+    <p style="margin-top:10px; color:var(--muted); font-size:13px;">Published {{ episode['published_at'] }}</p>
+
+    {% if ads %}
+    <div style="margin-top:36px; display:grid; gap:14px;">
+      {% for ad in ads %}
+      <a class="ad-unit" href="{{ ad['link_url'] or '#' }}">
+        <div class="thumb">{% if ad['creative_image'] %}<img src="{{ ad['creative_image'] }}" alt="">{% endif %}</div>
+        <div><span class="tag">Sponsored</span><h4>{{ ad['title'] }}</h4><span class="sponsor">{{ ad['sponsor'] }}</span></div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

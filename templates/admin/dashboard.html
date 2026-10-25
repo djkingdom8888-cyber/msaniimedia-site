@@ -1,0 +1,29 @@
+{% extends "admin/layout.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block heading %}Dashboard{% endblock %}
+{% block content %}
+
+<div class="a-card">
+  <h3>Welcome back</h3>
+  <p class="a-card-sub" style="margin-bottom:0;">Manage shows, episodes, news, ads, and live broadcasts. Changes appear on the live site immediately.</p>
+</div>
+
+<div class="dash-grid">
+  <div class="dash-stat"><strong>{{ stats.shows }}</strong><span>Shows</span></div>
+  <div class="dash-stat"><strong>{{ stats.episodes }}</strong><span>Episodes</span></div>
+  <div class="dash-stat"><strong>{{ stats.news }}</strong><span>News Posts</span></div>
+  <div class="dash-stat"><strong>{{ stats.ads }}</strong><span>Ads</span></div>
+  <div class="dash-stat"><strong>{{ stats.live_sessions }}</strong><span>Live Sessions</span></div>
+</div>
+
+<div class="a-card" style="margin-top:24px;">
+  <h3>Quick links</h3>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <a href="{{ url_for('admin_shows') }}" class="a-btn a-btn-outline a-btn-sm">Manage Shows</a>
+    <a href="{{ url_for('admin_news') }}" class="a-btn a-btn-outline a-btn-sm">Manage News</a>
+    <a href="{{ url_for('admin_ads') }}" class="a-btn a-btn-outline a-btn-sm">Manage Ads</a>
+    <a href="{{ url_for('admin_live') }}" class="a-btn a-btn-outline a-btn-sm">Manage Live Sessions</a>
+  </div>
+</div>
+
+{% endblock %}

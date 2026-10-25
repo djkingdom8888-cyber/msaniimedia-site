@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sign in · Msanii Media Admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}" />
+</head>
+<body class="admin-body">
+<div class="login-shell">
+  <div class="login-card">
+    <div class="brand-mark">MM</div>
+    <h1>Msanii Media Admin</h1>
+    <p class="sub">Sign in to manage shows, news, ads, and live sessions.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endif %}
+    {% endwith %}
+    <form method="post">
+      <div class="a-field"><label>Username</label><input type="text" name="username" autocomplete="username" required autofocus></div>
+      <div class="a-field"><label>Password</label><input type="password" name="password" autocomplete="current-password" required></div>
+      <button type="submit" class="a-btn a-btn-primary" style="width:100%; justify-content:center; margin-top:6px;">Sign in</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

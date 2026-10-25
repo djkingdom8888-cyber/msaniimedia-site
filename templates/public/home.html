@@ -1,0 +1,86 @@
+{% extends "public/base.html" %}
+{% block content %}
+
+<section class="hero">
+  <div class="wrap">
+    {% if live_now %}
+    <a href="{{ url_for('live_room', room_code=live_now[0]['room_code']) }}" class="live-pill" style="margin-bottom:22px;"><span class="dot"></span> LIVE NOW — {{ live_now[0]['title'] }}</a>
+    {% else %}
+    <span class="eyebrow">Original series · Talk shows · Live</span>
+    {% endif %}
+    <h1 style="margin-top:18px;">Stories worth <span class="accent">watching</span>, told live.</h1>
+    <p class="lead">{{ site_name }} produces original series, talk shows, and breaking coverage — and streams it live with real audience interaction, not just comments scrolling by.</p>
+    <div class="hero-ctas">
+      <a href="{{ url_for('live_list') }}" class="btn btn-primary btn-lg">▶ Watch Live</a>
+      <a href="{{ url_for('shows_list') }}" class="btn btn-outline btn-lg">Browse Shows</a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head left">
+      <h2>Latest Episodes</h2>
+      <a href="{{ url_for('shows_list') }}" class="nav-link">All shows →</a>
+    </div>
+    {% if episodes %}
+    <div class="card-grid">
+      {% for ep in episodes %}
+      <a class="media-card" href="{{ url_for('episode_detail', episode_id=ep['id']) }}">
+        <div class="thumb">
+          {% if ep['thumbnail'] %}<img src="{{ ep['thumbnail'] }}" alt="">{% else %}▶{% endif %}
+          <span class="badge-kind">{{ 'Talk Show' if ep['show_kind'] == 'talk_show' else 'Series' }}</span>
+        </div>
+        <div class="body">
+          <h3>{{ ep['title'] }}</h3>
+          <p>{{ ep['description'] }}</p>
+          <div class="meta"><span>{{ ep['show_title'] }}</span><span>Ep. {{ ep['episode_number'] }}</span></div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-note">No episodes published yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% if ads %}
+<section class="section" style="padding-top:0;">
+  <div class="wrap">
+    <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);">
+      {% for ad in ads %}
+      <a class="ad-unit" href="{{ ad['link_url'] or '#' }}">
+        <div class="thumb">{% if ad['creative_image'] %}<img src="{{ ad['creative_image'] }}" alt="">{% endif %}</div>
+        <div><span class="tag">Sponsored</span><h4>{{ ad['title'] }}</h4><span class="sponsor">{{ ad['sponsor'] }}</span></div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="section" style="background:var(--panel); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
+  <div class="wrap">
+    <div class="section-head left">
+      <h2>From the Newsroom</h2>
+      <a href="{{ url_for('news_list') }}" class="nav-link">All news →</a>
+    </div>
+    {% if news %}
+    {% for post in news %}
+    <a class="news-row" href="{{ url_for('news_detail', post_id=post['id']) }}" style="text-decoration:none; color:inherit; display:flex;">
+      <div class="thumb">{% if post['image'] %}<img src="{{ post['image'] }}" alt="">{% endif %}</div>
+      <div>
+        <h3>{{ post['title'] }}</h3>
+        <p>{{ post['body'][:180] }}{{ '…' if post['body']|length > 180 }}</p>
+        <div class="meta">{{ post['author'] }} · {{ post['published_at'] }}</div>
+      </div>
+    </a>
+    {% endfor %}
+    {% else %}
+    <p class="empty-note">No news posted yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

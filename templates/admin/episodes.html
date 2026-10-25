@@ -1,0 +1,72 @@
+{% extends "admin/layout.html" %}
+{% block title %}Episodes — {{ show['title'] }}{% endblock %}
+{% block heading %}Episodes — {{ show['title'] }}{% endblock %}
+{% block content %}
+
+<a href="{{ url_for('admin_shows') }}" style="font-size:13px; color:var(--a-accent-600); font-weight:700;">← All shows</a>
+
+<div class="a-card" style="margin-top:16px;">
+  <h3>Add an episode</h3>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="a-row">
+      <div class="a-field"><label>Title</label><input type="text" name="title" required></div>
+      <div class="a-field"><label>Episode #</label><input type="number" name="episode_number" value="1" min="1"></div>
+    </div>
+    <div class="a-field"><label>Description</label><textarea name="description"></textarea></div>
+    <div class="a-row">
+      <div class="a-field"><label>Video URL (YouTube link or direct .mp4)</label><input type="url" name="video_url" placeholder="https://youtube.com/watch?v=…"></div>
+      <div class="a-field"><label>Published date</label><input type="text" name="published_at" placeholder="YYYY-MM-DD"></div>
+    </div>
+    <div class="a-field"><label>Thumbnail</label><input type="file" name="thumbnail" accept="image/*"></div>
+    <button type="submit" class="a-btn a-btn-primary">Add episode</button>
+  </form>
+</div>
+
+<div class="a-card">
+  <h3>All episodes</h3>
+  {% if episodes %}
+    {% for ep in episodes %}
+    <div class="a-list-item" data-episode-id="{{ ep['id'] }}" data-title="{{ ep['title'] }}" data-description="{{ ep['description'] }}" data-video-url="{{ ep['video_url'] }}">
+      <div><strong>Ep. {{ ep['episode_number'] }} — {{ ep['title'] }}</strong><span class="sub">{{ ep['published_at'] }}</span></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="badge-pill {{ 'on' if ep['active'] else 'off' }}">{{ 'Active' if ep['active'] else 'Hidden' }}</span>
+        <button type="button" class="a-btn a-btn-outline a-btn-sm edit-episode-btn">Edit</button>
+        <form method="post" action="{{ url_for('admin_episode_toggle', episode_id=ep['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="a-btn {{ 'a-btn-danger' if ep['active'] else 'a-btn-outline' }} a-btn-sm">{{ 'Hide' if ep['active'] else 'Unhide' }}</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="a-empty">No episodes yet.</p>
+  {% endif %}
+</div>
+
+<script>
+document.querySelectorAll('.edit-episode-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var row = btn.closest('.a-list-item');
+    var id = row.dataset.episodeId;
+    var newTitle = prompt('Episode title:', row.dataset.title);
+    if (newTitle === null || !newTitle.trim()) return;
+    var newVideoUrl = prompt('Video URL:', row.dataset.videoUrl);
+    if (newVideoUrl === null || !newVideoUrl.trim()) return;
+    var newDescription = prompt('Description:', row.dataset.description);
+    if (newDescription === null) return;
+    fetch('/api/episodes/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle.trim(), video_url: newVideoUrl.trim(), description: newDescription.trim() || ' ' })
+    }).then(function (res) {
+      if (res.status === 401) { alert('Your session expired — please log in again.'); location.href = '/admin/login'; return; }
+      return res.json().then(function (data) {
+        if (!res.ok) { alert(data.error || 'Could not update that episode.'); return; }
+        location.reload();
+      });
+    });
+  });
+});
+</script>
+{% endblock %}

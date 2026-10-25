@@ -1,0 +1,58 @@
+{% extends "public/base.html" %}
+{% block title %}{{ live_session['title'] }} — Live · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:32px;">
+  <div class="wrap">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+      <span class="status-badge {{ live_session['status'] }}" id="status-badge">{{ live_session['status']|upper }}</span>
+      <h1 style="font-size:22px;">{{ live_session['title'] }}</h1>
+    </div>
+
+    <div class="live-grid">
+      <div>
+        <div class="live-stage">
+          <video id="host-video" autoplay playsinline></video>
+          <div id="stage-waiting" class="overlay-status">Waiting for the host to go live…</div>
+        </div>
+        <div id="guest-tiles" class="guest-tiles"></div>
+
+        <div id="join-camera-box" style="margin-top:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <button id="request-camera-btn" class="btn btn-outline">🎥 Ask to join on camera</button>
+          <button id="switch-camera-btn" class="btn btn-outline btn-sm hidden" type="button">↺ Switch Camera</button>
+          <span id="camera-status" style="font-size:13px; color:var(--muted);"></span>
+        </div>
+      </div>
+
+      <div class="chat-panel">
+        <div class="chat-head">Live Chat</div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input id="chat-input" type="text" placeholder="Say something…" maxlength="300">
+          <button id="chat-send" class="btn btn-primary btn-sm">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Name prompt -->
+<div id="name-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:200;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:32px; width:100%; max-width:360px;">
+    <h3 style="margin-bottom:6px;">What should we call you?</h3>
+    <p style="color:var(--muted); font-size:13.5px; margin-bottom:18px;">Shown in chat and if you join on camera.</p>
+    <div class="inline-field">
+      <input id="name-input" type="text" placeholder="Your name" maxlength="40">
+      <button id="name-submit" class="btn btn-primary">Join</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  window.LIVE_ROOM = {{ live_session['room_code']|tojson }};
+  window.LIVE_STATUS = {{ live_session['status']|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/live-viewer.js') }}"></script>
+
+{% endblock %}

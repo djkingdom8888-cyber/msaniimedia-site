@@ -1,0 +1,31 @@
+{% extends "public/base.html" %}
+{% block title %}{{ show['title'] }} · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:48px;">
+  <div class="wrap">
+    <span class="eyebrow">{{ 'Talk Show' if show['kind'] == 'talk_show' else 'Series' }}</span>
+    <h1 style="margin-top:16px; font-size:clamp(28px,4vw,42px);">{{ show['title'] }}</h1>
+    <p style="margin-top:14px; color:var(--muted); font-size:16px; max-width:640px;">{{ show['description'] }}</p>
+
+    <h3 style="margin:44px 0 20px;">Episodes</h3>
+    {% if episodes %}
+    <div class="card-grid">
+      {% for ep in episodes %}
+      <a class="media-card" href="{{ url_for('episode_detail', episode_id=ep['id']) }}">
+        <div class="thumb">{% if ep['thumbnail'] %}<img src="{{ ep['thumbnail'] }}" alt="">{% else %}▶{% endif %}</div>
+        <div class="body">
+          <h3>{{ ep['title'] }}</h3>
+          <p>{{ ep['description'] }}</p>
+          <div class="meta"><span>Ep. {{ ep['episode_number'] }}</span><span>{{ ep['published_at'] }}</span></div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-note">No episodes published yet for this show.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

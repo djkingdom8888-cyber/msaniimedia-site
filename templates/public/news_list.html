@@ -1,0 +1,28 @@
+{% extends "public/base.html" %}
+{% block title %}News · {{ site_name }}{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top:48px;">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Newsroom</span>
+      <h2 style="margin-top:14px;">Stories &amp; Coverage</h2>
+    </div>
+    {% if posts %}
+    {% for post in posts %}
+    <a class="news-row" href="{{ url_for('news_detail', post_id=post['id']) }}" style="display:flex;">
+      <div class="thumb">{% if post['image'] %}<img src="{{ post['image'] }}" alt="">{% endif %}</div>
+      <div>
+        <h3>{{ post['title'] }}</h3>
+        <p>{{ post['body'][:220] }}{{ '…' if post['body']|length > 220 }}</p>
+        <div class="meta">{{ post['author'] }} · {{ post['published_at'] }}</div>
+      </div>
+    </a>
+    {% endfor %}
+    {% else %}
+    <p class="empty-note">No news posted yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{% block title %}Admin{% endblock %} · Msanii Media Admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}" />
+</head>
+<body class="admin-body">
+{% set endpoint = request.endpoint %}
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="brand"><span class="mark">MM</span> Msanii Media</div>
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-nav-link {{ 'active' if endpoint == 'admin_dashboard' }}">Dashboard</a>
+    <a href="{{ url_for('admin_shows') }}" class="admin-nav-link {{ 'active' if endpoint in ['admin_shows','admin_episodes'] }}">Shows &amp; Episodes</a>
+    <a href="{{ url_for('admin_news') }}" class="admin-nav-link {{ 'active' if endpoint == 'admin_news' }}">News</a>
+    <a href="{{ url_for('admin_ads') }}" class="admin-nav-link {{ 'active' if endpoint == 'admin_ads' }}">Ads</a>
+    <a href="{{ url_for('admin_live') }}" class="admin-nav-link {{ 'active' if endpoint == 'admin_live' }}">Live Sessions</a>
+    <div class="sidebar-foot">
+      <a href="{{ url_for('home') }}" target="_blank" rel="noopener" class="admin-nav-link">↗ View live site</a>
+      <a href="{{ url_for('admin_settings') }}" class="admin-nav-link">⚙ Settings</a>
+      <a href="{{ url_for('admin_logout') }}" class="admin-nav-link">⎋ Log out</a>
+    </div>
+  </aside>
+  <main class="admin-main">
+    <div class="admin-topbar">
+      <div><div class="crumb">Admin</div><h1>{% block heading %}Dashboard{% endblock %}</h1></div>
+      {% block topbar_actions %}{% endblock %}
+    </div>
+    <div class="admin-content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{% extends "admin/layout.html" %}
+{% block title %}News{% endblock %}
+{% block heading %}News{% endblock %}
+{% block content %}
+
+<div class="a-card">
+  <h3>Publish a news post</h3>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="a-field"><label>Title</label><input type="text" name="title" required></div>
+    <div class="a-row">
+      <div class="a-field"><label>Author</label><input type="text" name="author"></div>
+      <div class="a-field"><label>Published date</label><input type="text" name="published_at" placeholder="YYYY-MM-DD"></div>
+    </div>
+    <div class="a-field"><label>Image</label><input type="file" name="image" accept="image/*"></div>
+    <div class="a-field"><label>Body</label><textarea name="body" rows="8"></textarea></div>
+    <button type="submit" class="a-btn a-btn-primary">Publish</button>
+  </form>
+</div>
+
+<div class="a-card">
+  <h3>All posts</h3>
+  {% if posts %}
+    {% for p in posts %}
+    <div class="a-list-item">
+      <div><strong>{{ p['title'] }}</strong><span class="sub">{{ p['author'] }} · {{ p['published_at'] }}</span></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="badge-pill {{ 'on' if p['active'] else 'off' }}">{{ 'Active' if p['active'] else 'Hidden' }}</span>
+        <form method="post" action="{{ url_for('admin_news_toggle', post_id=p['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="a-btn {{ 'a-btn-danger' if p['active'] else 'a-btn-outline' }} a-btn-sm">{{ 'Hide' if p['active'] else 'Unhide' }}</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="a-empty">No news posts yet.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

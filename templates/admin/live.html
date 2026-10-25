@@ -1,0 +1,84 @@
+{% extends "admin/layout.html" %}
+{% block title %}Live Sessions{% endblock %}
+{% block heading %}Live Sessions{% endblock %}
+{% block content %}
+
+<div class="a-card">
+  <h3>Create a live session</h3>
+  <p class="a-card-sub">Creates a room. Use the host link to go live from the presenter's device; share the viewer link with your audience.</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="a-row">
+      <div class="a-field"><label>Title</label><input type="text" name="title" placeholder="e.g. Friday Night Talk" required></div>
+      <div class="a-field"><label>Host name</label><input type="text" name="host_name" placeholder="e.g. Jordan Blake"></div>
+    </div>
+    <button type="submit" class="a-btn a-btn-primary">Create session</button>
+  </form>
+</div>
+
+<div class="a-card">
+  <h3>All sessions</h3>
+  {% if sessions %}
+    {% for s in sessions %}
+    <div class="a-list-item" data-session-id="{{ s['id'] }}" data-title="{{ s['title'] }}" data-has-recording="{{ '1' if s['recording_path'] else '' }}">
+      <div><strong>{{ s['title'] }}</strong><span class="sub">Hosted by {{ s['host_name'] or '—' }} · <span class="badge-pill {{ 'on' if s['status'] == 'live' else 'off' }}">{{ s['status']|upper }}</span></span></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <a href="{{ url_for('live_host', room_code=s['room_code']) }}" target="_blank" class="a-btn a-btn-primary a-btn-sm">Host console →</a>
+        <a href="{{ url_for('live_room', room_code=s['room_code']) }}" target="_blank" class="a-btn a-btn-outline a-btn-sm">Viewer link →</a>
+        {% if s['recording_path'] %}
+        <a href="{{ url_for('live_replay', room_code=s['room_code']) }}" target="_blank" class="a-btn a-btn-outline a-btn-sm">Replay →</a>
+        {% endif %}
+        <button type="button" class="a-btn a-btn-outline a-btn-sm edit-live-btn">Edit</button>
+        <button type="button" class="a-btn a-btn-danger a-btn-sm delete-live-btn">Delete</button>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="a-empty">No live sessions yet.</p>
+  {% endif %}
+</div>
+
+<script>
+function handleAuthFailure(res) {
+  if (res.status === 401) { alert('Your session expired — please log in again.'); location.href = '/admin/login'; return true; }
+  return false;
+}
+
+document.querySelectorAll('.edit-live-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var row = btn.closest('.a-list-item');
+    var id = row.dataset.sessionId;
+    var newTitle = prompt('Session title:', row.dataset.title);
+    if (newTitle === null || !newTitle.trim()) return;
+    fetch('/api/live/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle.trim() })
+    }).then(function (res) {
+      if (handleAuthFailure(res)) return;
+      return res.json().then(function (data) {
+        if (!res.ok) { alert(data.error || 'Could not update that session.'); return; }
+        location.reload();
+      });
+    });
+  });
+});
+
+document.querySelectorAll('.delete-live-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var row = btn.closest('.a-list-item');
+    var id = row.dataset.sessionId;
+    var title = row.dataset.title;
+    var warning = row.dataset.hasRecording
+      ? 'Delete "' + title + '"? This also permanently removes its saved recording.'
+      : 'Delete "' + title + '"?';
+    if (!confirm(warning)) return;
+    fetch('/api/live/' + encodeURIComponent(id), { method: 'DELETE' }).then(function (res) {
+      if (handleAuthFailure(res)) return;
+      if (!res.ok) { return res.json().then(function (data) { alert(data.error || 'Could not delete that session.'); }); }
+      location.reload();
+    });
+  });
+});
+</script>
+{% endblock %}
