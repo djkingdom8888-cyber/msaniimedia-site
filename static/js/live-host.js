@@ -23,7 +23,8 @@
   const switchCameraBtn = document.getElementById("switch-camera-btn");
   const filterSelect = document.getElementById("filter-select");
   const cameraSourceSelect = document.getElementById("camera-source-select");
-  let selectedDeviceId = null; // explicit device pick (e.g. "OBS Virtual Camera"); null = browser default
+  const shareWindowBtn = document.getElementById("share-window-btn");
+  let selectedDeviceId = null; // explicit device pick; null = browser default
 
   // Filters used to be applied via ctx.filter = "<css filter string>" at
   // draw time. That property is unreliable on WebKit/iOS Safari -- multi-
@@ -198,10 +199,8 @@
   if (switchCameraBtn) switchCameraBtn.onclick = switchCamera;
 
   // Lists every video input the browser can see (webcams, phone-continuity
-  // cameras, and virtual cameras like "OBS Virtual Camera") so the host can
-  // explicitly pick one instead of relying on facingMode guessing -- that's
-  // the only way to route a desktop switcher's program output (via OBS's
-  // virtual camera) into this broadcast instead of a real webcam.
+  // cameras, virtual cameras if one happens to be installed) so the host can
+  // explicitly pick one instead of relying on facingMode guessing.
   async function populateCameraSources() {
     if (!cameraSourceSelect || !navigator.mediaDevices.enumerateDevices) return;
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -248,6 +247,55 @@
     }
   }
   if (cameraSourceSelect) cameraSourceSelect.onchange = switchToSelectedSource;
+
+  // Captures a specific window/screen directly through the browser's own
+  // native picker (no virtual-camera driver needed) -- the straightforward
+  // way to put a desktop switcher's output window (e.g. KingdomProd Media's
+  // "Output" window) on the broadcast when a virtual-camera bridge isn't
+  // available or isn't working on this machine.
+  async function shareWindow() {
+    if (!hostStream) return;
+    shareWindowBtn.disabled = true;
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const newTrack = displayStream.getVideoTracks()[0];
+      const oldTrack = hostStream.getVideoTracks()[0];
+      hostStream.removeTrack(oldTrack);
+      oldTrack.stop();
+      hostStream.addTrack(newTrack);
+      selfPreview.srcObject = hostStream;
+      // The browser's own "Stop sharing" control (or closing the shared
+      // window) ends the track -- fall back to the camera rather than
+      // leaving the broadcast on a dead track.
+      // Falls back to a real camera -- deliberately a plain video-track
+      // swap (like switchCamera/switchToSelectedSource above), NOT a call
+      // to initCamera(), which would re-run audio setup and double-connect
+      // the mic into the mix.
+      newTrack.onended = async () => {
+        try {
+          const fallbackConstraint = cameraSourceSelect && cameraSourceSelect.value
+            ? { deviceId: { exact: cameraSourceSelect.value } }
+            : { facingMode: { ideal: currentFacingMode } };
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: fallbackConstraint });
+          const fallbackTrack = fallbackStream.getVideoTracks()[0];
+          const deadTrack = hostStream.getVideoTracks()[0];
+          hostStream.removeTrack(deadTrack);
+          deadTrack.stop();
+          hostStream.addTrack(fallbackTrack);
+          selfPreview.srcObject = hostStream;
+        } catch (err) {
+          console.error("Couldn't fall back to camera after window share ended:", err);
+        }
+      };
+    } catch (err) {
+      if (err.name !== "NotAllowedError") {
+        alert("Couldn't start window sharing: " + err.message);
+      }
+    } finally {
+      shareWindowBtn.disabled = false;
+    }
+  }
+  if (shareWindowBtn) shareWindowBtn.onclick = shareWindow;
 
   if (filterSelect) {
     filterSelect.onchange = () => { currentFilter = filterSelect.value; };
