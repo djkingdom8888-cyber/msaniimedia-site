@@ -501,6 +501,14 @@
     chatInput.value = "";
   }
 
+  // Acquire the camera (and populate the source dropdown) as soon as the
+  // page loads, not only once "Go Live" is clicked -- the operator needs to
+  // pick the right source (e.g. OBS Virtual Camera) and see a working
+  // preview *before* committing to go live, not after.
+  initCamera().catch((err) => {
+    console.error("Camera init on load failed:", err);
+  });
+
   goLiveBtn.onclick = async () => {
     goLiveBtn.disabled = true;
     goLiveBtn.textContent = "Starting…";
