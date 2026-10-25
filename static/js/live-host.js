@@ -302,6 +302,7 @@
       // to initCamera(), which would re-run audio setup and double-connect
       // the mic into the mix.
       newTrack.onended = async () => {
+        alert("Window sharing stopped -- switching back to camera. (If you didn't click \"Stop sharing\" yourself, the shared window may have closed or been minimized.)");
         try {
           const fallbackConstraint = cameraSourceSelect && cameraSourceSelect.value
             ? { deviceId: { exact: cameraSourceSelect.value } }
