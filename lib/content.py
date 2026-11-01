@@ -220,6 +220,7 @@ def delete_live_session(session_id):
     with db.session() as conn:
         conn.execute("DELETE FROM chat_messages WHERE live_session_id = ?", (session_id,))
         conn.execute("DELETE FROM camera_requests WHERE live_session_id = ?", (session_id,))
+        conn.execute("DELETE FROM live_stream_destinations WHERE live_session_id = ?", (session_id,))
         conn.execute("DELETE FROM live_sessions WHERE id = ?", (session_id,))
 
 
@@ -264,3 +265,66 @@ def list_pending_camera_requests(session_id):
             "SELECT * FROM camera_requests WHERE live_session_id = ? AND status = 'pending' ORDER BY requested_at",
             (session_id,),
         ).fetchall()
+
+
+# ---------------- Live broadcast-out destinations (RTMP fan-out) ----------------
+
+def list_stream_destinations(session_id):
+    with db.session() as conn:
+        return conn.execute(
+            "SELECT * FROM live_stream_destinations WHERE live_session_id = ? ORDER BY id ASC",
+            (session_id,),
+        ).fetchall()
+
+
+def get_stream_destination(dest_id):
+    with db.session() as conn:
+        return conn.execute("SELECT * FROM live_stream_destinations WHERE id = ?", (dest_id,)).fetchone()
+
+
+def create_stream_destination(session_id, name, platform, rtmp_url, stream_key, enabled, remember_key):
+    # Plaintext stream keys only ever reach the database if the host
+    # explicitly opted in via "remember on this device" -- otherwise this
+    # row's stream_key stays blank and the real value lives only in the
+    # host's browser, passed fresh on every broadcast/start call.
+    stored_key = stream_key if remember_key else ""
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO live_stream_destinations
+               (live_session_id, name, platform, rtmp_url, stream_key, enabled, remember_key)
+               VALUES (?,?,?,?,?,?,?)""",
+            (session_id, name, platform, rtmp_url, stored_key, 1 if enabled else 0, 1 if remember_key else 0),
+        )
+        return cur.lastrowid
+
+
+def update_stream_destination(dest_id, name=None, platform=None, rtmp_url=None, stream_key=None,
+                               enabled=None, remember_key=None):
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM live_stream_destinations WHERE id = ?", (dest_id,)).fetchone()
+        if not row:
+            return
+        effective_remember = row["remember_key"] if remember_key is None else (1 if remember_key else 0)
+        if name is not None:
+            conn.execute("UPDATE live_stream_destinations SET name = ? WHERE id = ?", (name, dest_id))
+        if platform is not None:
+            conn.execute("UPDATE live_stream_destinations SET platform = ? WHERE id = ?", (platform, dest_id))
+        if rtmp_url is not None:
+            conn.execute("UPDATE live_stream_destinations SET rtmp_url = ? WHERE id = ?", (rtmp_url, dest_id))
+        if enabled is not None:
+            conn.execute("UPDATE live_stream_destinations SET enabled = ? WHERE id = ?", (1 if enabled else 0, dest_id))
+        if remember_key is not None:
+            conn.execute("UPDATE live_stream_destinations SET remember_key = ? WHERE id = ?", (effective_remember, dest_id))
+        if stream_key is not None:
+            # If "remember" isn't (or is no longer) opted-in, never persist
+            # the key -- including blanking out a previously-remembered one
+            # the moment the host turns the toggle off.
+            stored_key = stream_key if effective_remember else ""
+            conn.execute("UPDATE live_stream_destinations SET stream_key = ? WHERE id = ?", (stored_key, dest_id))
+        elif remember_key is not None and not effective_remember:
+            conn.execute("UPDATE live_stream_destinations SET stream_key = '' WHERE id = ?", (dest_id,))
+
+
+def delete_stream_destination(dest_id):
+    with db.session() as conn:
+        conn.execute("DELETE FROM live_stream_destinations WHERE id = ?", (dest_id,))

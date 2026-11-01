@@ -88,6 +88,25 @@ CREATE TABLE IF NOT EXISTS camera_requests (
     status TEXT NOT NULL DEFAULT 'pending',  -- pending, approved, denied, ended
     requested_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Multi-destination RTMP broadcast-out config (Facebook/YouTube/Twitch/
+-- TikTok/custom), one row per destination the host has added for a given
+-- live session -- see lib/stream_relay.py for the ffmpeg tee fan-out that
+-- actually pushes to these. stream_key is only ever written here when
+-- remember_key is set (the host's explicit "remember on this device"
+-- opt-in); otherwise it's kept blank in the database and the real key is
+-- only ever held in the browser + passed fresh at broadcast-start time.
+CREATE TABLE IF NOT EXISTS live_stream_destinations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    live_session_id INTEGER NOT NULL REFERENCES live_sessions(id),
+    name TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT 'custom',  -- twitch, youtube, facebook, tiktok, custom
+    rtmp_url TEXT NOT NULL DEFAULT '',
+    stream_key TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    remember_key INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 

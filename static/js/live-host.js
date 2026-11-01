@@ -26,6 +26,17 @@
   const shareWindowBtn = document.getElementById("share-window-btn");
   let selectedDeviceId = null; // explicit device pick; null = browser default
 
+  // ---- Broadcast Destinations (RTMP fan-out to Facebook/YouTube/Twitch/TikTok) ----
+  const manageDestinationsBtn = document.getElementById("manage-destinations-btn");
+  const broadcastToggleBtn = document.getElementById("broadcast-toggle-btn");
+  const destinationsSummaryEl = document.getElementById("destinations-summary");
+  const broadcastStatusEl = document.getElementById("broadcast-status");
+  const destinationsDialogBackdrop = document.getElementById("destinations-dialog-backdrop");
+  const destinationsListEl = document.getElementById("destinations-list");
+  const destinationsListHeaderEl = document.getElementById("destinations-list-header");
+  const addDestinationBtn = document.getElementById("add-destination-btn");
+  const destinationsDoneBtn = document.getElementById("destinations-done-btn");
+
   // Filters used to be applied via ctx.filter = "<css filter string>" at
   // draw time. That property is unreliable on WebKit/iOS Safari -- multi-
   // function filter strings frequently render as a silent no-op there even
@@ -184,6 +195,7 @@
       selfPreview.play().catch(() => {});
     await populateCameraSources();
     setupAudioAndCanvas();
+    renderAudioSources();
   }
 
   // Swaps the host's own camera between front/back. This never needs to touch
@@ -470,7 +482,43 @@
     if (entry.stream) {
       audioCtx.createMediaStreamSource(entry.stream).connect(mixDestination);
     }
-    guestConnections.set(sid, { pc: entry.pc, video: entry.video, name: entry.name });
+    guestConnections.set(sid, { pc: entry.pc, video: entry.video, name: entry.name, stream: entry.stream });
+    renderAudioSources();
+  }
+
+  // ---------------- Per-camera mute (host + every approved guest) ----------------
+  // Audio is mixed through the Web Audio graph above (host mic + each guest's
+  // stream both feed mixDestination), but a MediaStreamTrack with
+  // enabled=false outputs silence into any node sourced from it -- so muting
+  // is just toggling .enabled on the right track, no graph rewiring needed.
+  const audioSourcesListEl = document.getElementById("audio-sources-list");
+  function renderAudioSources() {
+    if (!audioSourcesListEl) return;
+    audioSourcesListEl.innerHTML = "";
+
+    const sources = [];
+    const hostAudioTrack = hostStream && hostStream.getAudioTracks()[0];
+    if (hostAudioTrack) sources.push({ name: window.HOST_NAME || "Host", track: hostAudioTrack });
+    guestConnections.forEach((g) => {
+      const track = g.stream && g.stream.getAudioTracks()[0];
+      if (track) sources.push({ name: g.name || "Guest", track });
+    });
+
+    sources.forEach(({ name, track }) => {
+      const row = document.createElement("div");
+      row.className = "audio-source-row";
+      const label = document.createElement("span");
+      label.textContent = name;
+      const muteBtn = document.createElement("button");
+      muteBtn.type = "button";
+      muteBtn.className = "btn btn-sm btn-outline";
+      const paint = () => { muteBtn.textContent = track.enabled ? "🎤 Mute" : "🔇 Unmute"; muteBtn.classList.toggle("is-muted", !track.enabled); };
+      paint();
+      muteBtn.onclick = () => { track.enabled = !track.enabled; paint(); };
+      row.appendChild(label);
+      row.appendChild(muteBtn);
+      audioSourcesListEl.appendChild(row);
+    });
   }
 
   // Host clicked "Decline": tear down the preview connection. Nothing was
@@ -488,6 +536,7 @@
     try { g.pc.close(); } catch (e) { /* already closed */ }
     if (g.video.parentNode) g.video.parentNode.removeChild(g.video);
     guestConnections.delete(sid);
+    renderAudioSources();
   }
 
   // Connection dropped before a decision was ever made (pending) vs. after
@@ -544,6 +593,336 @@
     row.appendChild(actions);
     camRequestsBox.appendChild(row);
   }
+
+  // ---------------- Broadcast Destinations (RTMP fan-out) ----------------
+  // Mirrors kingdomprodmedia's "Manage Destinations" dialog UX (platform
+  // dropdown, stream key / full RTMP URL field, enable toggle, remember-key
+  // opt-in) but implemented here in plain Jinja/vanilla JS against this
+  // project's own Flask endpoints (app.py's /live/<room>/destinations and
+  // /broadcast/start|stop|status) instead of Electron IPC. The actual
+  // fan-out (ffmpeg `-f tee`) happens server-side in lib/stream_relay.py --
+  // this file's only job is managing destination rows and, once streaming,
+  // handing the server a continuous feed of the SAME composed finalStream
+  // every viewer already gets, via a second, dedicated MediaRecorder.
+  let streamPlatformPresets = [];
+  let destinations = []; // server-shape rows: {id, name, platform, rtmp_url, stream_key, enabled, remember_key}
+  let broadcastRecorder = null;
+  let isBroadcasting = false;
+  let broadcastStatusPollTimer = null;
+
+  function platformPreset(platformId) {
+    return streamPlatformPresets.find((p) => p.id === platformId) || null;
+  }
+
+  function renderDestinationsSummary() {
+    if (!destinations.length) {
+      destinationsSummaryEl.textContent = "No destinations configured";
+      broadcastToggleBtn.disabled = true;
+      return;
+    }
+    const enabled = destinations.filter((d) => d.enabled);
+    const labels = enabled.map((d) => (platformPreset(d.platform) || {}).label || d.name).filter(Boolean);
+    destinationsSummaryEl.textContent = enabled.length
+      ? `${enabled.length} of ${destinations.length} enabled: ${labels.join(", ")}`
+      : `${destinations.length} destination(s), none enabled`;
+    broadcastToggleBtn.disabled = !(isLive && finalStream && enabled.length > 0) || isBroadcasting === "pending";
+  }
+
+  async function loadDestinations() {
+    try {
+      const [presetsRes, destRes] = await Promise.all([
+        fetch("/api/stream-platforms").then((r) => r.json()),
+        fetch(`/live/${ROOM}/destinations`).then((r) => r.json()),
+      ]);
+      streamPlatformPresets = presetsRes.platforms || [];
+      destinations = destRes.destinations || [];
+      renderDestinationsSummary();
+    } catch (err) {
+      console.error("Failed to load broadcast destinations:", err);
+    }
+  }
+
+  async function createDestination() {
+    const preset = platformPreset("custom");
+    const res = await fetch(`/live/${ROOM}/destinations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: `Destination ${destinations.length + 1}`,
+        platform: "custom",
+        rtmp_url: (preset && preset.rtmp_url) || "",
+        stream_key: "",
+        enabled: true,
+        remember_key: false,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) destinations.push(data.destination);
+    return data;
+  }
+
+  async function patchDestination(destId, fields) {
+    const res = await fetch(`/live/${ROOM}/destinations/${destId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const idx = destinations.findIndex((d) => d.id === destId);
+      if (idx !== -1) destinations[idx] = data.destination;
+    }
+    return data;
+  }
+
+  async function removeDestination(destId) {
+    await fetch(`/live/${ROOM}/destinations/${destId}`, { method: "DELETE" });
+    destinations = destinations.filter((d) => d.id !== destId);
+  }
+
+  function renderDestinationRows() {
+    destinationsListEl.innerHTML = "";
+    if (!destinations.length) {
+      if (destinationsListHeaderEl) destinationsListHeaderEl.style.display = "none";
+      const hint = document.createElement("p");
+      hint.style.cssText = "color:var(--muted); font-size:13px;";
+      hint.textContent = "No destinations yet — click \"+ Add Destination\" below, then use the Platform dropdown to pick Twitch, YouTube, Facebook, TikTok, or Custom RTMP.";
+      destinationsListEl.appendChild(hint);
+      return;
+    }
+    if (destinationsListHeaderEl) destinationsListHeaderEl.style.display = "grid";
+    destinations.forEach((dest) => {
+      const row = document.createElement("div");
+      row.className = "destination-row" + (dest.enabled ? "" : " is-disabled");
+
+      const enabledToggle = document.createElement("input");
+      enabledToggle.type = "checkbox";
+      enabledToggle.checked = dest.enabled;
+      enabledToggle.title = "Enabled";
+
+      const platformSelect = document.createElement("select");
+      streamPlatformPresets.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.label;
+        if (p.id === dest.platform) opt.selected = true;
+        platformSelect.appendChild(opt);
+      });
+
+      const preset = platformPreset(dest.platform);
+      const isLockedPreset = !!(preset && preset.rtmp_url);
+
+      const urlInput = document.createElement("input");
+      urlInput.type = "text";
+      urlInput.autocomplete = "off";
+      urlInput.value = dest.rtmp_url || "";
+      urlInput.readOnly = isLockedPreset;
+      urlInput.placeholder = dest.platform === "tiktok" ? "Full RTMP URL from TikTok LIVE Studio" : "RTMP URL";
+
+      const keyInput = document.createElement("input");
+      keyInput.type = "password";
+      keyInput.autocomplete = "off";
+      keyInput.value = dest.stream_key || "";
+      keyInput.placeholder = "Stream key";
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-sm btn-outline";
+      removeBtn.textContent = "Remove";
+
+      const extraRow = document.createElement("div");
+      extraRow.className = "dest-extra-row";
+      const rememberLabel = document.createElement("label");
+      const rememberCheckbox = document.createElement("input");
+      rememberCheckbox.type = "checkbox";
+      rememberCheckbox.checked = dest.remember_key;
+      rememberLabel.appendChild(rememberCheckbox);
+      rememberLabel.appendChild(document.createTextNode(" Remember this key on this device"));
+      extraRow.appendChild(rememberLabel);
+
+      row.appendChild(enabledToggle);
+      row.appendChild(platformSelect);
+      row.appendChild(urlInput);
+      row.appendChild(keyInput);
+      row.appendChild(removeBtn);
+      row.appendChild(extraRow);
+      destinationsListEl.appendChild(row);
+
+      enabledToggle.addEventListener("change", async () => {
+        dest.enabled = enabledToggle.checked;
+        row.classList.toggle("is-disabled", !dest.enabled);
+        await patchDestination(dest.id, { enabled: dest.enabled });
+        renderDestinationsSummary();
+      });
+      platformSelect.addEventListener("change", async () => {
+        dest.platform = platformSelect.value;
+        const p = platformPreset(dest.platform);
+        if (p && p.rtmp_url) dest.rtmp_url = p.rtmp_url;
+        await patchDestination(dest.id, { platform: dest.platform, rtmp_url: dest.rtmp_url });
+        renderDestinationsSummary();
+        renderDestinationRows(); // reflect the new platform's readOnly/placeholder
+      });
+      urlInput.addEventListener("blur", async () => {
+        dest.rtmp_url = urlInput.value.trim();
+        await patchDestination(dest.id, { rtmp_url: dest.rtmp_url });
+      });
+      keyInput.addEventListener("blur", async () => {
+        dest.stream_key = keyInput.value.trim();
+        await patchDestination(dest.id, { stream_key: dest.stream_key, remember_key: dest.remember_key });
+      });
+      rememberCheckbox.addEventListener("change", async () => {
+        dest.remember_key = rememberCheckbox.checked;
+        await patchDestination(dest.id, { remember_key: dest.remember_key, stream_key: dest.stream_key });
+      });
+      removeBtn.addEventListener("click", async () => {
+        await removeDestination(dest.id);
+        renderDestinationsSummary();
+        renderDestinationRows();
+      });
+    });
+  }
+
+  function openManageDestinationsDialog() {
+    renderDestinationRows();
+    destinationsDialogBackdrop.style.display = "flex";
+  }
+  function closeManageDestinationsDialog() {
+    destinationsDialogBackdrop.style.display = "none";
+    renderDestinationsSummary();
+  }
+  if (manageDestinationsBtn) manageDestinationsBtn.onclick = openManageDestinationsDialog;
+  if (destinationsDoneBtn) destinationsDoneBtn.onclick = closeManageDestinationsDialog;
+  if (destinationsDialogBackdrop) {
+    destinationsDialogBackdrop.addEventListener("click", (e) => {
+      if (e.target === destinationsDialogBackdrop) closeManageDestinationsDialog();
+    });
+  }
+  if (addDestinationBtn) {
+    addDestinationBtn.onclick = async () => {
+      await createDestination();
+      renderDestinationsSummary();
+      renderDestinationRows();
+    };
+  }
+
+  function pickBroadcastMimeType() {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+    const candidates = ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp9,opus", "video/webm"];
+    return candidates.find((c) => MediaRecorder.isTypeSupported(c)) || "";
+  }
+
+  function setBroadcastUiState(state, detail) {
+    const labels = { idle: "Start Stream", connecting: "Starting…", live: "Stop Stream", error: "Retry Start Stream" };
+    broadcastToggleBtn.textContent = labels[state] || "Start Stream";
+    broadcastToggleBtn.classList.toggle("btn-danger", state === "live");
+    broadcastStatusEl.classList.toggle("is-live", state === "live");
+    broadcastStatusEl.classList.toggle("is-error", state === "error");
+    if (state === "live") {
+      broadcastStatusEl.textContent = `Broadcasting live to ${detail || destinations.filter((d) => d.enabled).length} destination(s).`;
+    } else if (state === "error") {
+      broadcastStatusEl.textContent = "Broadcast error: " + (detail || "unknown error");
+    } else if (state === "connecting") {
+      broadcastStatusEl.textContent = "Connecting to destination(s)…";
+    } else {
+      broadcastStatusEl.textContent = "";
+    }
+  }
+
+  async function startBroadcast() {
+    if (!isLive || !finalStream) {
+      alert("Go live first, then start the broadcast-out stream.");
+      return;
+    }
+    const enabledCount = destinations.filter((d) => d.enabled).length;
+    if (!enabledCount) {
+      alert("Add and enable at least one destination first (Manage Destinations).");
+      return;
+    }
+    broadcastToggleBtn.disabled = true;
+    setBroadcastUiState("connecting");
+    try {
+      const res = await fetch(`/live/${ROOM}/broadcast/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destinations }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setBroadcastUiState("error", data.error);
+        broadcastToggleBtn.disabled = false;
+        return;
+      }
+      isBroadcasting = true;
+      const mimeType = pickBroadcastMimeType();
+      broadcastRecorder = mimeType
+        ? new MediaRecorder(finalStream, { mimeType })
+        : new MediaRecorder(finalStream);
+      broadcastRecorder.ondataavailable = async (e) => {
+        if (!e.data || e.data.size === 0 || !isBroadcasting) return;
+        try {
+          const buf = await e.data.arrayBuffer();
+          socket.emit("stream_chunk", ROOM, buf);
+        } catch (err) {
+          console.error("Failed to relay a broadcast chunk:", err);
+        }
+      };
+      broadcastRecorder.start(1000);
+      setBroadcastUiState("live", data.destinations);
+      broadcastToggleBtn.disabled = false;
+      broadcastStatusPollTimer = setInterval(pollBroadcastStatus, 4000);
+    } catch (err) {
+      setBroadcastUiState("error", err.message);
+      broadcastToggleBtn.disabled = false;
+    }
+  }
+
+  async function stopBroadcast() {
+    broadcastToggleBtn.disabled = true;
+    isBroadcasting = false;
+    if (broadcastStatusPollTimer) { clearInterval(broadcastStatusPollTimer); broadcastStatusPollTimer = null; }
+    if (broadcastRecorder && broadcastRecorder.state !== "inactive") {
+      try { broadcastRecorder.stop(); } catch (e) { /* already stopped */ }
+    }
+    broadcastRecorder = null;
+    try {
+      await fetch(`/live/${ROOM}/broadcast/stop`, { method: "POST" });
+    } catch (err) {
+      console.error("Failed to stop broadcast relay:", err);
+    }
+    setBroadcastUiState("idle");
+    broadcastToggleBtn.disabled = false;
+    renderDestinationsSummary();
+  }
+
+  async function pollBroadcastStatus() {
+    try {
+      const res = await fetch(`/live/${ROOM}/broadcast/status`);
+      const data = await res.json();
+      if (isBroadcasting && !data.active) {
+        // ffmpeg exited on its own (e.g. a destination rejected the stream
+        // key) -- surface it rather than silently looking "live" forever.
+        isBroadcasting = false;
+        if (broadcastStatusPollTimer) { clearInterval(broadcastStatusPollTimer); broadcastStatusPollTimer = null; }
+        if (broadcastRecorder && broadcastRecorder.state !== "inactive") {
+          try { broadcastRecorder.stop(); } catch (e) { /* already stopped */ }
+        }
+        broadcastRecorder = null;
+        setBroadcastUiState("error", data.error || data.stderr_tail || "the broadcast relay stopped unexpectedly");
+        broadcastToggleBtn.disabled = false;
+      }
+    } catch (err) {
+      console.error("Broadcast status poll failed:", err);
+    }
+  }
+
+  if (broadcastToggleBtn) {
+    broadcastToggleBtn.onclick = () => {
+      if (isBroadcasting) stopBroadcast();
+      else startBroadcast();
+    };
+  }
+
+  loadDestinations();
 
   // ---------------- Socket events ----------------
   socket.on("connect", () => {
@@ -610,9 +989,13 @@
       endLiveBtn.disabled = false;
 
       recordedChunks = [];
-      mediaRecorder = new MediaRecorder(finalStream, { mimeType: "video/webm;codecs=vp8,opus" });
+      const vodMimeType = pickBroadcastMimeType();
+      mediaRecorder = vodMimeType
+        ? new MediaRecorder(finalStream, { mimeType: vodMimeType })
+        : new MediaRecorder(finalStream);
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
       mediaRecorder.start(1000);
+      renderDestinationsSummary(); // now that isLive+finalStream exist, "Start Stream" can enable
     } catch (err) {
       alert("Couldn't access camera/microphone: " + err.message);
       goLiveBtn.disabled = false;
@@ -624,6 +1007,7 @@
     endLiveBtn.disabled = true;
     endLiveBtn.textContent = "Saving…";
     isLive = false;
+    if (isBroadcasting) await stopBroadcast();
     socket.emit("host_end_live", { room: ROOM });
     statusBadge.textContent = "ENDED";
     statusBadge.className = "status-badge ended";

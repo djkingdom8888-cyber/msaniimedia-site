@@ -38,7 +38,27 @@
             <option value="dreamy">Dreamy</option>
           </select>
         </div>
+        <div class="broadcast-panel" style="margin-top:14px;">
+          <div class="broadcast-panel-head">
+            <div><strong>Audio Sources</strong> <span style="color:var(--muted); font-size:12.5px;">Mute any camera's mic without touching the others &mdash; prevents echo from multiple open mics</span></div>
+          </div>
+          <div id="audio-sources-list" class="audio-sources-list"></div>
+        </div>
         <div id="camera-requests" style="margin-top:16px;"></div>
+
+        <div class="broadcast-panel">
+          <div class="broadcast-panel-head">
+            <div>
+              <strong>Broadcast Destinations</strong>
+              <span id="destinations-summary" class="destinations-summary">No destinations configured</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button id="manage-destinations-btn" class="btn btn-outline btn-sm" type="button">Manage Destinations</button>
+              <button id="broadcast-toggle-btn" class="btn btn-primary btn-sm" type="button" disabled>Start Stream</button>
+            </div>
+          </div>
+          <div id="broadcast-status" class="broadcast-status"></div>
+        </div>
       </div>
 
       <div class="chat-panel">
@@ -52,6 +72,28 @@
     </div>
   </div>
 </section>
+
+<!-- Manage Destinations dialog -- hidden until "Manage Destinations" is clicked -->
+<div id="destinations-dialog-backdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal-box">
+    <h3 style="margin-bottom:4px;">Streaming Destinations</h3>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:14px;">
+      Broadcast this session out to Facebook, YouTube, Twitch, and/or TikTok at the same time, in addition to viewers watching here. Each destination needs a stream key (or, for TikTok, the full RTMP URL TikTok LIVE Studio gives you for this session).
+    </p>
+    <div class="destination-row destination-row-header" id="destinations-list-header" style="display:none;">
+      <span></span>
+      <span>Platform</span>
+      <span>RTMP URL</span>
+      <span>Stream key</span>
+      <span></span>
+    </div>
+    <div class="destinations-list" id="destinations-list"></div>
+    <button id="add-destination-btn" class="btn btn-sm btn-outline" type="button">+ Add Destination</button>
+    <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+      <button id="destinations-done-btn" class="btn btn-primary btn-sm" type="button">Done</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>

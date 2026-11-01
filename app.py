@@ -1,3 +1,4 @@
+import atexit
 import os
 import secrets
 
@@ -5,7 +6,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from flask_socketio import SocketIO, join_room, emit
 from werkzeug.utils import secure_filename
 
-from lib import db, auth, content
+from lib import db, auth, content, stream_relay
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 300 * 1024 * 1024  # 300MB, generous for a recorded live clip
@@ -29,6 +30,18 @@ db.init_db()
 auth.bootstrap_admin()
 auth.reset_password_if_requested()
 socketio = SocketIO(app, async_mode="gevent", max_http_buffer_size=300 * 1024 * 1024)
+
+# Multi-destination RTMP broadcast-out (Facebook/YouTube/Twitch/TikTok at
+# once) -- one real-time ffmpeg tee-fanout process per live room, fed by
+# WebM chunks relayed from the host's browser over Socket.IO. See
+# lib/stream_relay.py for the actual fan-out logic (ported from
+# kingdomprodmedia/lib/kpm-core.js's proven buildFfmpegStreamArgs).
+broadcast_relay = stream_relay.BroadcastRelay()
+atexit.register(broadcast_relay.stop_all)
+# room_code -> host's current Socket.IO sid, so a host closing the tab
+# without clicking "End Live" still tears down any running relay instead of
+# leaving an orphaned ffmpeg process pushing to a platform forever.
+_host_sid_by_room = {}
 
 
 @app.context_processor
@@ -189,6 +202,108 @@ def upload_recording(room_code):
     path = save_upload(file, "recordings")
     content.set_live_recording(live_session["id"], path)
     return jsonify({"ok": True, "path": path})
+
+
+# ==================================================================
+# Live: Broadcast Destinations (multi-platform RTMP fan-out)
+# ==================================================================
+# No admin login required on any of these -- consistent with the rest of
+# the live-host routes, where knowing the host link IS the access control
+# (same model as /live/<room_code>/host and /upload-recording above).
+
+def _serialize_destination(d):
+    return {
+        "id": d["id"],
+        "name": d["name"],
+        "platform": d["platform"],
+        "rtmp_url": d["rtmp_url"],
+        # Only echo a real key back when the host opted in to remembering
+        # it on this device -- otherwise the browser (not this response) is
+        # the sole holder of whatever key is currently typed in.
+        "stream_key": d["stream_key"] if d["remember_key"] else "",
+        "enabled": bool(d["enabled"]),
+        "remember_key": bool(d["remember_key"]),
+    }
+
+
+@app.route("/api/stream-platforms")
+def api_stream_platforms():
+    return jsonify({"platforms": stream_relay.list_stream_platform_presets()})
+
+
+@app.route("/live/<room_code>/destinations", methods=["GET", "POST"])
+def live_destinations(room_code):
+    live_session = content.get_live_session_by_room(room_code)
+    if not live_session:
+        abort(404)
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        existing_count = len(content.list_stream_destinations(live_session["id"]))
+        norm = stream_relay.normalize_stream_destination(data, existing_count)
+        dest_id = content.create_stream_destination(
+            live_session["id"], norm["name"], norm["platform"], norm["rtmp_url"],
+            norm["stream_key"], norm["enabled"], norm["remember_key"],
+        )
+        return jsonify({"ok": True, "destination": _serialize_destination(content.get_stream_destination(dest_id))}), 201
+    destinations = [_serialize_destination(d) for d in content.list_stream_destinations(live_session["id"])]
+    return jsonify({"destinations": destinations})
+
+
+@app.route("/live/<room_code>/destinations/<int:dest_id>", methods=["PATCH", "DELETE"])
+def live_destination_detail(room_code, dest_id):
+    live_session = content.get_live_session_by_room(room_code)
+    if not live_session:
+        abort(404)
+    dest = content.get_stream_destination(dest_id)
+    if not dest or dest["live_session_id"] != live_session["id"]:
+        abort(404)
+    if request.method == "DELETE":
+        content.delete_stream_destination(dest_id)
+        return jsonify({"ok": True})
+    data = request.get_json(silent=True) or {}
+    kwargs = {}
+    for key in ("name", "platform", "rtmp_url", "stream_key"):
+        if key in data:
+            kwargs[key] = data[key]
+    if "enabled" in data:
+        kwargs["enabled"] = bool(data["enabled"])
+    if "remember_key" in data:
+        kwargs["remember_key"] = bool(data["remember_key"])
+    content.update_stream_destination(dest_id, **kwargs)
+    return jsonify({"ok": True, "destination": _serialize_destination(content.get_stream_destination(dest_id))})
+
+
+@app.route("/live/<room_code>/broadcast/start", methods=["POST"])
+def broadcast_start(room_code):
+    live_session = content.get_live_session_by_room(room_code)
+    if not live_session:
+        abort(404)
+    if live_session["status"] != "live":
+        return jsonify({"ok": False, "error": "Go live first, then start the broadcast-out relay."}), 400
+    data = request.get_json(silent=True) or {}
+    destinations = data.get("destinations") or []
+    push_urls = stream_relay.resolve_enabled_stream_destinations(destinations)
+    if not push_urls:
+        return jsonify({"ok": False, "error": "No enabled destination has a valid RTMP URL/key."}), 400
+    result = broadcast_relay.start(room_code, push_urls)
+    return jsonify(result), (200 if result.get("ok") else 409)
+
+
+@app.route("/live/<room_code>/broadcast/stop", methods=["POST"])
+def broadcast_stop(room_code):
+    live_session = content.get_live_session_by_room(room_code)
+    if not live_session:
+        abort(404)
+    was_active = broadcast_relay.stop(room_code)
+    return jsonify({"ok": True, "was_active": was_active})
+
+
+@app.route("/live/<room_code>/broadcast/status")
+def broadcast_status(room_code):
+    live_session = content.get_live_session_by_room(room_code)
+    if not live_session:
+        abort(404)
+    return jsonify(broadcast_relay.status(room_code))
 
 
 # ==================================================================
@@ -474,11 +589,26 @@ def on_join_room(data):
     if not room_code:
         return
     join_room(room_code)
+    if role == "host":
+        _host_sid_by_room[room_code] = request.sid
     live_session = content.get_live_session_by_room(room_code)
     if live_session:
         history = [dict(m) for m in content.list_chat_messages(live_session["id"])]
         emit("chat_history", {"messages": history})
     emit("presence", {"role": role, "name": name, "sid": request.sid}, to=room_code, include_self=False)
+
+
+@socketio.on("disconnect")
+def on_disconnect():
+    # If the disconnecting socket was a room's host (e.g. they closed the
+    # tab instead of clicking "End Live"), stop any running broadcast-out
+    # relay for that room so ffmpeg never keeps pushing to a platform with
+    # nobody left to end it.
+    sid = request.sid
+    for room_code, host_sid in list(_host_sid_by_room.items()):
+        if host_sid == sid:
+            del _host_sid_by_room[room_code]
+            broadcast_relay.stop(room_code)
 
 
 @socketio.on("chat_message")
@@ -512,7 +642,20 @@ def on_host_end_live(data):
     if not live_session:
         return
     content.set_live_status(live_session["id"], "ended")
+    broadcast_relay.stop(room_code)
     emit("live_status", {"status": "ended"}, to=room_code)
+
+
+@socketio.on("stream_chunk")
+def on_stream_chunk(room_code, data):
+    # Continuous WebM chunks from the host's dedicated broadcast
+    # MediaRecorder (static/js/live-host.js) -- relayed straight into the
+    # room's ffmpeg tee-fanout process stdin, if one is running. Silently a
+    # no-op if no broadcast is active for this room (e.g. the host hasn't
+    # clicked "Start Stream", or already clicked "Stop").
+    if not room_code or not isinstance(data, (bytes, bytearray)):
+        return
+    broadcast_relay.write_chunk(room_code, bytes(data))
 
 
 @socketio.on("camera_offer")

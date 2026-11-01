@@ -193,6 +193,53 @@ p { margin: 0; }
 }
 #filter-select:focus { outline: none; border-color: var(--accent); }
 
+/* ---------------- Broadcast Destinations (multi-platform RTMP fan-out) ---------------- */
+.broadcast-panel {
+  margin-top: 16px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.broadcast-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.destinations-summary { color: var(--muted); font-size: 13px; margin-left: 10px; }
+.broadcast-status { margin-top: 8px; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+.broadcast-status.is-error { color: var(--accent); }
+.broadcast-status.is-live { color: var(--live-green); }
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 999;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-box {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 22px; width: 100%; max-width: 640px; max-height: 85vh; overflow-y: auto;
+  box-shadow: var(--shadow);
+}
+.destinations-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.destination-row {
+  display: grid; grid-template-columns: auto 110px 1fr 1fr auto; gap: 8px; align-items: center;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 10px;
+}
+.destination-row.is-disabled { opacity: 0.55; }
+.audio-sources-list { display: flex; flex-direction: column; gap: 6px; }
+.audio-source-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; font-size: 13.5px;
+}
+.audio-source-row button.is-muted { border-color: var(--accent); color: var(--accent); }
+.destination-row-header {
+  background: none; border: none; padding: 0 10px; margin-bottom: -4px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+}
+.destination-row select, .destination-row input {
+  background: var(--ink); border: 1px solid var(--border); color: white;
+  padding: 8px 10px; border-radius: 7px; font-size: 13px; width: 100%;
+}
+.destination-row input:focus, .destination-row select:focus { outline: none; border-color: var(--accent); }
+.destination-row .dest-extra-row {
+  grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap;
+}
+.destination-row .dest-extra-row label { display: flex; align-items: center; gap: 6px; }
+
 /* ---------------- Forms (public: request camera name prompt etc.) ---------------- */
 .inline-field { display: flex; gap: 8px; }
 .inline-field input {

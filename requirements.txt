@@ -5,3 +5,4 @@ gevent>=24.0
 gevent-websocket>=0.10.1
 packaging>=24.0
 gunicorn>=22.0
+imageio-ffmpeg>=0.5  # bundled static ffmpeg binary, used by lib/stream_relay.py's RTMP broadcast-out fan-out when no system ffmpeg is installed
