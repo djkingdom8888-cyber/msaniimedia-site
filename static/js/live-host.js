@@ -364,41 +364,73 @@
     ctx.drawImage(videoEl, sx, sy, sw, sh, x, y, w, h);
   }
 
+  // Switcher state: null = equal auto-grid (old behavior). Set to "host" or
+  // a guest's sid to make that one tile fill the main view, with everyone
+  // else demoted to a thumbnail strip along the bottom -- same idea as
+  // KingdomProd Media's "click a tile to put it on Program" switcher.
+  let mainTileKey = null;
+  function setMainTile(key) {
+    mainTileKey = mainTileKey === key ? null : key; // click again to go back to equal grid
+    renderAudioSources();
+  }
+
+  function getTiles() {
+    const tiles = [{ key: "host", el: selfPreview, name: window.HOST_NAME || "Host" }];
+    guestConnections.forEach((g, sid) => tiles.push({ key: sid, el: g.video, name: g.name || "Guest" }));
+    return tiles;
+  }
+
+  function drawTileFrame(tile, x, y, w, h, isMain) {
+    if (tile.el.readyState >= 2) {
+      drawCover(tile.el, x, y, w, h);
+    }
+    ctx.save();
+    ctx.strokeStyle = isMain ? "#ffd23b" : (tile.key === "host" ? "rgba(255,255,255,0.25)" : "#ff3b4e");
+    ctx.lineWidth = isMain ? 3 : 2;
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.font = "16px sans-serif";
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    const labelW = ctx.measureText(tile.name).width + 16;
+    ctx.fillRect(x + 8, y + h - 32, labelW, 24);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(tile.name, x + 16, y + h - 14);
+    ctx.restore();
+  }
+
   function drawLoop() {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Tile 0 is always the host. Every connected guest adds another tile —
     // the grid reflows live as people join or leave, no fixed layout.
-    const tiles = [{ el: selfPreview, name: window.HOST_NAME || "Host" }];
-    guestConnections.forEach((g) => tiles.push({ el: g.video, name: g.name || "Guest" }));
+    const tiles = getTiles();
+    const mainTile = mainTileKey && tiles.find((t) => t.key === mainTileKey);
 
-    const total = tiles.length;
-    const cols = Math.ceil(Math.sqrt(total));
-    const rows = Math.ceil(total / cols);
-    const cellW = canvas.width / cols;
-    const cellH = canvas.height / rows;
-
-    tiles.forEach((tile, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = col * cellW;
-      const y = row * cellH;
-      if (tile.el.readyState >= 2) {
-        drawCover(tile.el, x, y, cellW, cellH);
+    if (mainTile) {
+      // Main-speaker layout: one large view, everyone else as a thumbnail
+      // strip along the bottom (skipped entirely if it's just the host alone).
+      const others = tiles.filter((t) => t.key !== mainTileKey);
+      const stripH = others.length ? Math.round(canvas.height * 0.22) : 0;
+      drawTileFrame(mainTile, 0, 0, canvas.width, canvas.height - stripH, true);
+      if (others.length) {
+        const thumbW = canvas.width / others.length;
+        others.forEach((tile, i) => {
+          drawTileFrame(tile, i * thumbW, canvas.height - stripH, thumbW, stripH, false);
+        });
       }
-      ctx.save();
-      ctx.strokeStyle = i === 0 ? "rgba(255,255,255,0.25)" : "#ff3b4e";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
-      ctx.font = "16px sans-serif";
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      const labelW = ctx.measureText(tile.name).width + 16;
-      ctx.fillRect(x + 8, y + cellH - 32, labelW, 24);
-      ctx.fillStyle = "#fff";
-      ctx.fillText(tile.name, x + 16, y + cellH - 14);
-      ctx.restore();
-    });
+    } else {
+      // No main picked: equal auto-grid, same as before.
+      const total = tiles.length;
+      const cols = Math.ceil(Math.sqrt(total));
+      const rows = Math.ceil(total / cols);
+      const cellW = canvas.width / cols;
+      const cellH = canvas.height / rows;
+      tiles.forEach((tile, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        drawTileFrame(tile, col * cellW, row * cellH, cellW, cellH, false);
+      });
+    }
 
     // Applied once to the whole composited frame (grid + borders + labels)
     // rather than per-tile before -- one getImageData/putImageData pass is
@@ -498,25 +530,36 @@
 
     const sources = [];
     const hostAudioTrack = hostStream && hostStream.getAudioTracks()[0];
-    if (hostAudioTrack) sources.push({ name: window.HOST_NAME || "Host", track: hostAudioTrack });
-    guestConnections.forEach((g) => {
+    if (hostStream) sources.push({ key: "host", name: window.HOST_NAME || "Host", track: hostAudioTrack });
+    guestConnections.forEach((g, sid) => {
       const track = g.stream && g.stream.getAudioTracks()[0];
-      if (track) sources.push({ name: g.name || "Guest", track });
+      sources.push({ key: sid, name: g.name || "Guest", track });
     });
 
-    sources.forEach(({ name, track }) => {
+    sources.forEach(({ key, name, track }) => {
       const row = document.createElement("div");
       row.className = "audio-source-row";
       const label = document.createElement("span");
       label.textContent = name;
-      const muteBtn = document.createElement("button");
-      muteBtn.type = "button";
-      muteBtn.className = "btn btn-sm btn-outline";
-      const paint = () => { muteBtn.textContent = track.enabled ? "🎤 Mute" : "🔇 Unmute"; muteBtn.classList.toggle("is-muted", !track.enabled); };
-      paint();
-      muteBtn.onclick = () => { track.enabled = !track.enabled; paint(); };
       row.appendChild(label);
-      row.appendChild(muteBtn);
+
+      const mainBtn = document.createElement("button");
+      mainBtn.type = "button";
+      mainBtn.className = "btn btn-sm btn-outline";
+      const paintMain = () => { const isMain = mainTileKey === key; mainBtn.textContent = isMain ? "★ Main" : "Make Main"; mainBtn.classList.toggle("is-main", isMain); };
+      paintMain();
+      mainBtn.onclick = () => { setMainTile(key); };
+      row.appendChild(mainBtn);
+
+      if (track) {
+        const muteBtn = document.createElement("button");
+        muteBtn.type = "button";
+        muteBtn.className = "btn btn-sm btn-outline";
+        const paintMute = () => { muteBtn.textContent = track.enabled ? "🎤 Mute" : "🔇 Unmute"; muteBtn.classList.toggle("is-muted", !track.enabled); };
+        paintMute();
+        muteBtn.onclick = () => { track.enabled = !track.enabled; paintMute(); };
+        row.appendChild(muteBtn);
+      }
       audioSourcesListEl.appendChild(row);
     });
   }
@@ -536,6 +579,7 @@
     try { g.pc.close(); } catch (e) { /* already closed */ }
     if (g.video.parentNode) g.video.parentNode.removeChild(g.video);
     guestConnections.delete(sid);
+    if (mainTileKey === sid) mainTileKey = null; // the main speaker just left -- fall back to the grid
     renderAudioSources();
   }
 

@@ -225,6 +225,9 @@ p { margin: 0; }
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; font-size: 13.5px;
 }
 .audio-source-row button.is-muted { border-color: var(--accent); color: var(--accent); }
+.audio-source-row button.is-main { border-color: #ffd23b; color: #ffd23b; }
+.audio-source-row { flex-wrap: wrap; }
+.audio-source-row span { flex: 1 1 auto; min-width: 80px; }
 .destination-row-header {
   background: none; border: none; padding: 0 10px; margin-bottom: -4px;
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
